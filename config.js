@@ -4,7 +4,7 @@ window.LYRICS_CONFIG = {
   // Put your Spotify app's Client ID here to give visitors a one-tap "Connect Spotify"
   // button. A Client ID is not a secret. While your Spotify app is in development mode
   // it only works for you and up to five accounts you add under User Management.
-  clientId: '',
+  clientId: '620c5237bb8a4355b90863213d4c789b',
 
   // How often to ask Spotify what is playing, in seconds.
   pollSeconds: 3,
