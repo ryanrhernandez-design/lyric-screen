@@ -24,8 +24,26 @@ Tap the screen (or move the mouse) for the controls:
 |---|---|---|
 | Earlier / Later | Shifts the lyrics in 0.25s steps, for speakers that add delay | Left / Right |
 | A− / A+ | Text size | `-` / `+` |
+| Style | Steps through the lyric styles below | `S` |
 | Fullscreen | Hides the browser's bars | `F` |
 | Log out | Forgets the Spotify login on this device | |
+
+## Styles
+
+The **Style** button changes how the lyrics look. The choice is remembered on that device.
+
+| Style | Look |
+|---|---|
+| Classic | A scrolling list over the blurred album cover, with the current line lit |
+| Kinetic | Black capitals on pale paper. Each word waits as a small label on a hairline, then flies into place as it is sung |
+| Spotlight | One huge line at a time, lighting up word by word, with the next line waiting underneath |
+| Neon | Unlit sign lettering that switches on word by word, in a colour picked per song |
+| Terminal | Typed out on a green screen, with a blinking cursor |
+| Shuffle | A different style for every song |
+
+To start a device in a given style, add it to the address, for example `?style=kinetic` or `?style=shuffle`. This is the easy way on a kiosk with no keyboard. To change the style new visitors start in, set `style` in `config.js`.
+
+The lyrics service times whole lines, not single words. Word-by-word effects spread the words across their line by length, so a word can light up a little before or after it is sung.
 
 ## Put it online
 
@@ -84,5 +102,7 @@ npm test
 | `js/spotify.js` | Login, token refresh, the now-playing call |
 | `js/lyrics.js` | LRCLIB lookup, matching and caching |
 | `js/lrc.js` | Parsing timed lyrics |
+| `js/words.js` | Splitting a line into words and estimating when each is sung |
+| `js/styles.js` | The list of lyric styles and the shuffle rule (the looks themselves are in `style.css`) |
 | `js/demo.js` | The made-up song behind `?demo` |
-| `config.js` | Optional shared Client ID and poll interval |
+| `config.js` | Optional shared Client ID, poll interval and starting style |

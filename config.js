@@ -8,4 +8,9 @@ window.LYRICS_CONFIG = {
 
   // How often to ask Spotify what is playing, in seconds.
   pollSeconds: 3,
+
+  // The lyric style a device starts in, until someone picks another with the Style
+  // button: 'classic', 'kinetic', 'spotlight', 'neon', 'terminal', or 'shuffle' for a
+  // different one every song. Leave empty for 'classic'.
+  style: '',
 };

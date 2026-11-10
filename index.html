@@ -84,6 +84,12 @@
       <p id="lyricsNote"></p>
     </section>
 
+    <div id="titleCard" aria-hidden="true">
+      <b id="cardTitle"></b>
+      <span id="cardAlbum"></span>
+      <span id="cardArtist"></span>
+    </div>
+
     <section id="idle" aria-live="polite">
       <div id="clock"></div>
       <p id="idleTitle">Nothing playing</p>
@@ -100,6 +106,7 @@
         <button type="button" data-act="smaller" title="Smaller text (-)">A&minus;</button>
         <button type="button" data-act="bigger" title="Bigger text (+)">A+</button>
       </div>
+      <button type="button" data-act="style" id="styleBtn" title="Change how the lyrics look (S)">Style: Classic</button>
       <button type="button" data-act="fullscreen" id="fullscreenBtn" title="Fullscreen (F)">Fullscreen</button>
       <button type="button" data-act="logout" id="logoutBtn">Log out</button>
     </div>

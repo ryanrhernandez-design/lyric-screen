@@ -530,6 +530,343 @@ body:not(.controls-on) #player { cursor: none; }
   }
 }
 
+/* ---------- Lyric styles ----------
+   <html data-style="..."> is set while the display is showing (see js/styles.js).
+   Classic is everything above. Each style below restyles the same markup:
+   .line is a lyric line (.past / .active), .w a word in it (.sung / .latest). */
+
+#lines { transform-origin: 50% 0; }
+
+#threads {
+  display: none;
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+#threads polyline { fill: none; stroke: currentColor; stroke-width: 1; }
+
+#titleCard { display: none; }
+
+/* --- Kinetic: black words fly onto light paper, one at a time --- */
+
+html[data-style="kinetic"] { --kfont: "Arial Black", "Segoe UI Black", "Helvetica Neue", Roboto, Arial, sans-serif; }
+html[data-style="kinetic"][data-font="1"] { --kfont: Georgia, "Times New Roman", "DejaVu Serif", "Noto Serif", serif; }
+html[data-style="kinetic"][data-font="2"] { --kfont: "Marker Felt", "Segoe Print", "Chalkboard SE", "Bradley Hand", "Comic Neue", "Comic Sans MS", cursive; }
+
+html[data-style="kinetic"] #bg {
+  background:
+    radial-gradient(70% 55% at 82% 12%, hsla(var(--paper, 168), 70%, 97%, 0.95), hsla(var(--paper, 168), 70%, 97%, 0) 70%),
+    radial-gradient(80% 60% at 8% 96%, hsla(var(--paper, 168), 46%, 76%, 0.9), hsla(var(--paper, 168), 46%, 76%, 0) 72%),
+    hsl(var(--paper, 168), 40%, 87%);
+}
+
+html[data-style="kinetic"] .bg-img { opacity: 0; }
+html[data-style="kinetic"] #bg::after { display: none; }
+
+html[data-style="kinetic"] #player {
+  --fg: #0c0c0e;
+  --dim: rgba(0, 0, 0, 0.66);
+  --faint: rgba(0, 0, 0, 0.46);
+  --rule: rgba(0, 0, 0, 0.18);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  color: var(--fg);
+}
+
+/* Track details shrink to a small readout in the corner */
+html[data-style="kinetic"] .now {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--pad) * 0.7 + env(safe-area-inset-top, 0px));
+  right: calc(var(--pad) * 0.8 + env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column-reverse;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-end;
+  width: 24vmin;
+  min-width: 150px;
+  text-align: right;
+}
+
+html[data-style="kinetic"] .art-wrap { display: none; }
+html[data-style="kinetic"] .meta { flex: none; margin: 1vmin 0 0; }
+html[data-style="kinetic"] #title { -webkit-line-clamp: 1; font-size: clamp(0.78rem, 1.7vmin, 1.05rem); font-weight: 600; letter-spacing: 0; }
+html[data-style="kinetic"] #artist,
+html[data-style="kinetic"] #album { display: block; margin-top: 0.1em; font-size: clamp(0.7rem, 1.45vmin, 0.92rem); }
+html[data-style="kinetic"] .progress-block { flex: none; max-width: none; margin: 0; }
+html[data-style="kinetic"] .progress { height: 2px; border-radius: 0; background: rgba(0, 0, 0, 0.2); }
+html[data-style="kinetic"] #bar { background: #0c0c0e; }
+html[data-style="kinetic"] .times { margin-top: 5px; font-size: 0.72rem; }
+
+html[data-style="kinetic"] .lyrics {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  height: auto;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 15%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 15%, #000 100%);
+}
+
+html[data-style="kinetic"] #lines { right: 9vw; left: 7vw; }
+html[data-style="kinetic"] #lyricsNote { right: 9vw; left: 7vw; }
+html[data-style="kinetic"] #threads { display: block; color: rgba(0, 0, 0, 0.55); }
+
+html[data-style="kinetic"] .line {
+  padding: 0.06em 0 0.06em var(--indent, 0%);
+  font-family: var(--kfont);
+  font-size: calc(clamp(2rem, 9.5vmin, 8rem) * var(--lyric-scale));
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+html[data-style="kinetic"] .line.past,
+html[data-style="kinetic"] .line.active { opacity: 1; }
+html[data-style="kinetic"] .line.gap { font-size: calc(clamp(1.2rem, 4vmin, 3rem) * var(--lyric-scale)); }
+
+html[data-style="kinetic"] .w {
+  display: inline-block;
+  transform-origin: 0 50%;
+  transition: transform 0.42s cubic-bezier(0.2, 1.25, 0.35, 1), opacity 0.25s ease;
+}
+
+/* Words not yet sung wait below the line as small labels (scale matches WAIT_SCALE in app.js) */
+html[data-style="kinetic"] .line.active .w:not(.sung) {
+  transform: translate(var(--wx, 0), var(--wy, 2em)) scale(0.16);
+  opacity: 0.85;
+  transition: none;
+}
+
+html[data-style="kinetic"] #player.lyrics-plain .line {
+  font-size: calc(clamp(1.3rem, 4.6vmin, 3.4rem) * var(--lyric-scale));
+  line-height: 1.12;
+  opacity: 0.92;
+}
+
+html[data-style="kinetic"] #titleCard {
+  display: block;
+  position: absolute;
+  z-index: 3;
+  bottom: calc(11vh + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  max-width: 72vw;
+  padding: 1.8vmin 5vmin 2vmin calc(var(--pad) + env(safe-area-inset-left, 0px));
+  background: #0c0c0e;
+  color: #fff;
+  -webkit-clip-path: inset(0 100% 0 0);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.55s cubic-bezier(0.7, 0, 0.2, 1), -webkit-clip-path 0.55s cubic-bezier(0.7, 0, 0.2, 1);
+}
+
+html[data-style="kinetic"] #player.card-on #titleCard {
+  -webkit-clip-path: inset(0 0 0 0);
+  clip-path: inset(0 0 0 0);
+}
+
+html[data-style="kinetic"] #player.is-idle #titleCard { display: none; }
+
+#titleCard b {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: clamp(1.3rem, 4.4vmin, 3.2rem);
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+#titleCard span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: clamp(0.85rem, 2.1vmin, 1.4rem);
+  opacity: 0.72;
+}
+
+#titleCard span:empty { display: none; }
+#titleCard #cardArtist { opacity: 1; }
+
+/* --- Spotlight: one huge line at a time, the next one waiting underneath --- */
+
+html[data-style="spotlight"] #player {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-row-gap: 2vmin;
+}
+
+html[data-style="spotlight"] .lyrics {
+  grid-row: 1;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html[data-style="spotlight"] .now {
+  grid-row: 2;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+html[data-style="spotlight"] .art-wrap { flex: none; width: 9vmin; max-width: none; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+html[data-style="spotlight"] .meta { flex: 0 1 auto; margin: 0 0 0 2.4vmin; }
+html[data-style="spotlight"] #title { -webkit-line-clamp: 1; font-size: clamp(1rem, 2.4vmin, 1.6rem); }
+html[data-style="spotlight"] #artist { margin-top: 0.2em; font-size: clamp(0.85rem, 1.9vmin, 1.2rem); }
+html[data-style="spotlight"] #album { display: none; }
+html[data-style="spotlight"] .progress-block { flex: 1 1 0; min-width: 0; max-width: none; margin: 0 0 0 4vmin; }
+
+html[data-style="spotlight"] .line {
+  padding: 0.16em 3vw;
+  font-size: calc(clamp(2rem, 10vmin, 8.5rem) * var(--lyric-scale));
+  font-weight: 900;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  text-align: center;
+  opacity: 0;
+  transform: scale(0.46);
+  transition: opacity 0.45s ease, transform 0.6s cubic-bezier(0.22, 0.8, 0.26, 1);
+}
+
+html[data-style="spotlight"] .line.past { transform: scale(0.46) translateY(-40%); }
+html[data-style="spotlight"] .line.active { opacity: 1; transform: none; }
+html[data-style="spotlight"] .line.active + .line { opacity: 0.4; }
+
+html[data-style="spotlight"] .line.active .w { opacity: 0.3; transition: opacity 0.2s ease, text-shadow 0.4s ease; }
+html[data-style="spotlight"] .line.active .w.sung { opacity: 1; }
+html[data-style="spotlight"] .line.active .w.latest { text-shadow: 0 0 0.45em rgba(255, 255, 255, 0.6); }
+
+html[data-style="spotlight"] #player.lyrics-plain .line {
+  font-size: calc(clamp(1.3rem, 4.4vmin, 3.2rem) * var(--lyric-scale));
+  font-weight: 800;
+  opacity: 0.88;
+  transform: none;
+}
+
+html[data-style="spotlight"] #lyricsNote { text-align: center; }
+
+/* --- Neon: unlit tubes that light up word by word, in a colour picked per song --- */
+
+html[data-style="neon"] #player {
+  --n1: hsl(var(--hue, 320), 100%, 62%);
+  --n2: hsl(calc(var(--hue, 320) + 150), 100%, 64%);
+}
+
+html[data-style="neon"] #bg { background: #050308; }
+html[data-style="neon"] .bg-img.on { opacity: 0.2; }
+html[data-style="neon"] #bg::after { background: radial-gradient(120% 90% at 50% 40%, rgba(5, 3, 8, 0.25), rgba(5, 3, 8, 0.94)); }
+
+/* Room on the left for the glow, which the lyrics column would otherwise cut off */
+html[data-style="neon"] .lyrics { margin-left: -4vmin; }
+html[data-style="neon"] #lines, html[data-style="neon"] #lyricsNote { left: 4vmin; }
+
+html[data-style="neon"] .art-wrap { box-shadow: 0 0 0 2px var(--n1), 0 0 26px var(--n1); }
+html[data-style="neon"] #bar { background: var(--n1); }
+
+html[data-style="neon"] .line {
+  font-family: "Arial Rounded MT Bold", "Helvetica Rounded", Nunito, Quicksand, var(--font);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--n2);
+  opacity: 0.4;
+}
+
+html[data-style="neon"] .line.past { opacity: 0.16; }
+html[data-style="neon"] .line.active { opacity: 1; }
+
+html[data-style="neon"] .line.active .w { -webkit-text-stroke-color: var(--n1); transition: color 0.12s ease, text-shadow 0.3s ease; }
+
+html[data-style="neon"] .line.active .w.sung {
+  color: #fff;
+  -webkit-text-stroke-width: 0;
+  text-shadow: 0 0 0.06em #fff, 0 0 0.25em var(--n1), 0 0 0.6em var(--n1), 0 0 1.1em var(--n1);
+}
+
+html[data-style="neon"] .line.active .w.latest { animation: neon-on 0.34s steps(1) 1; }
+
+@keyframes neon-on {
+  0% { opacity: 0.3; }
+  20% { opacity: 1; }
+  35% { opacity: 0.45; }
+  55% { opacity: 1; }
+  70% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+html[data-style="neon"] #player.lyrics-plain .line {
+  color: #fff;
+  -webkit-text-stroke-width: 0;
+  text-shadow: 0 0 0.5em var(--n1);
+  opacity: 0.9;
+}
+
+/* --- Terminal: typed out on a green screen --- */
+
+html[data-style="terminal"] #bg { background: #020603; }
+html[data-style="terminal"] .bg-img { opacity: 0; }
+
+html[data-style="terminal"] #bg::after {
+  background:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.3) 2px, rgba(0, 0, 0, 0.3) 4px),
+    radial-gradient(120% 100% at 50% 50%, rgba(40, 255, 120, 0.08), rgba(0, 0, 0, 0.6));
+}
+
+html[data-style="terminal"] #player {
+  --fg: #7dffa0;
+  --dim: rgba(125, 255, 160, 0.72);
+  --faint: rgba(125, 255, 160, 0.46);
+  --rule: rgba(125, 255, 160, 0.26);
+  color: var(--fg);
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  text-shadow: 0 0 0.5em rgba(60, 255, 130, 0.45);
+}
+
+html[data-style="terminal"] .art-wrap { border-radius: 2px; box-shadow: 0 0 0 1px var(--rule); }
+html[data-style="terminal"] #art { -webkit-filter: grayscale(1) contrast(1.15) brightness(0.8) sepia(1) hue-rotate(70deg) saturate(2.4); filter: grayscale(1) contrast(1.15) brightness(0.8) sepia(1) hue-rotate(70deg) saturate(2.4); }
+html[data-style="terminal"] #title { font-weight: 600; letter-spacing: 0; }
+html[data-style="terminal"] .progress { border-radius: 0; background: var(--rule); }
+html[data-style="terminal"] #bar { background: var(--fg); }
+
+html[data-style="terminal"] .line {
+  padding: 0.2em 0;
+  font-size: calc(clamp(1.3rem, 4.6vmin, 3.6rem) * var(--lyric-scale));
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+html[data-style="terminal"] .line::before { content: "> "; opacity: 0.55; }
+html[data-style="terminal"] .line.past { opacity: 0.45; }
+html[data-style="terminal"] .line.active { opacity: 1; }
+html[data-style="terminal"] .line.active .w:not(.sung) { opacity: 0; }
+html[data-style="terminal"] .line.active .w.latest::after { content: "\2588"; margin-left: 0.12em; animation: cursor-blink 1s steps(1) infinite; }
+
+@keyframes cursor-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+html[data-style="terminal"] #player.lyrics-plain .line { opacity: 0.9; }
+html[data-style="terminal"] #player.lyrics-plain .line.gap::before { content: none; }
+
+/* The controls keep their own look in every style */
+html[data-style] .controls {
+  --dim: rgba(255, 255, 255, 0.64);
+  --rule: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-family: var(--font);
+  text-shadow: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  #lines, .line, .bg-img { transition-duration: 0.01s; }
+  #lines, .line, .w, .bg-img, #titleCard { transition-duration: 0.01s !important; animation: none !important; }
 }

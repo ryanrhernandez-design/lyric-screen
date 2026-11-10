@@ -4,20 +4,30 @@
 import * as spotify from './spotify.js';
 import { getLyrics } from './lyrics.js';
 import { lineIndexAt } from './lrc.js';
+import { splitWords, wordTimes, wordsSungAt } from './words.js';
+import { SHUFFLE, isChoice, styleInfo, nextChoice, shuffled, hash, unit } from './styles.js';
 import { demoSource } from './demo.js';
 
 const APP_NAME = 'Lyric Screen';
-const config = Object.assign({ clientId: '', pollSeconds: 3 }, window.LYRICS_CONFIG || {});
-const DEMO = new URLSearchParams(location.search).has('demo');
+const config = Object.assign({ clientId: '', pollSeconds: 3, style: '' }, window.LYRICS_CONFIG || {});
+const QUERY = new URLSearchParams(location.search);
+const DEMO = QUERY.has('demo');
 const source = DEMO ? demoSource : { nowPlaying: spotify.nowPlaying, lyrics: getLyrics };
 
 const POLL_PLAYING = Math.max(1, Number(config.pollSeconds) || 3) * 1000;
 const POLL_PAUSED = Math.max(POLL_PLAYING, 5000);
 const POLL_HIDDEN = 15000;
 const IDLE_AFTER_PAUSE = 10 * 60 * 1000; // a long pause hands the screen to the clock
-const ANCHOR = 0.4;                      // the current line sits this far down the lyrics area
 const OFFSET_STEP = 250;
 const SETTINGS_KEY = 'll.settings';
+
+// Kinetic style: words wait as small labels before they are sung, shrunk to WAIT_SCALE
+// (keep in step with style.css). The block of text leans a little, differently per verse,
+// and the paper takes one of a few tints per song.
+const WAIT_SCALE = 0.16;
+const TILTS = [-4, 3, -2, 4.5, -5, 2];
+const PAPERS = [168, 186, 202, 48, 18];
+const VERSE_LINES = 4;
 
 const NOTES = {
   loading: 'Finding lyrics…',
@@ -37,7 +47,7 @@ function readSettings() {
   }
 }
 
-const settings = Object.assign({ offset: 0, scale: 1 }, readSettings());
+const settings = Object.assign({ offset: 0, scale: 1, style: '' }, readSettings());
 
 const state = {
   running: false,
@@ -50,6 +60,12 @@ const state = {
   lines: [],      // synced lines as displayed
   lineEls: [],
   index: -2,      // highlighted line; -2 makes the next frame redraw
+  look: 'classic', // the style on screen
+  lookTrack: null, // the song shuffle last picked a style for
+  words: [],      // per synced line: { els, times, waits } for its words
+  tilts: [],      // per line: how far the kinetic block leans, in degrees
+  wordLine: -1,   // the line whose words were last updated...
+  wordCount: -1,  // ...and how many of them were lit
 };
 
 /* ---------- Setup screen ---------- */
@@ -63,6 +79,7 @@ function showSetup(message) {
   document.title = APP_NAME;
   setBackground('');
   clearToast();
+  applyLook(false); // the setup screen keeps its own look
   const error = $('setupError');
   error.textContent = message || '';
   error.hidden = !message;
@@ -130,6 +147,7 @@ function startPlayer() {
   $('player').hidden = false;
   state.running = true;
   state.track = null;
+  applyLook(true);
   setIdle(true, 'Connecting…', '');
   keepAwake();
   poll();
@@ -235,7 +253,9 @@ function applyPlayback(data, at) {
   if (changed) {
     state.track = track;
     fastPolls = 0;
+    applyLook(false);
     renderTrack(track);
+    showTitleCard(track);
     loadLyrics(track, 0);
   }
 }
@@ -336,6 +356,10 @@ function renderLyrics(result) {
   state.index = -2;
   state.lineEls = [];
   state.lines = [];
+  state.words = [];
+  state.tilts = [];
+  state.wordLine = -1;
+  state.wordCount = -1;
   box.textContent = '';
 
   player.classList.toggle('lyrics-plain', hasLines && result.kind === 'plain');
@@ -343,52 +367,144 @@ function renderLyrics(result) {
   $('lyricsNote').textContent = hasLines ? '' : (NOTES[result.kind] || NOTES.none);
   if (!hasLines) return;
 
+  const synced = result.kind === 'synced';
   let lines = result.lines;
-  if (result.kind === 'synced') {
+  if (synced) {
     // Give a long intro its own "line" so the first words aren't lit up early.
     if (lines[0].time > 3000) lines = [{ time: 0, text: '' }].concat(lines);
     state.lines = lines;
   }
 
+  const seed = state.track ? state.track.id : '';
   const fragment = document.createDocumentFragment();
+  let verse = 0;
+  let inVerse = 0;
   lines.forEach(function (line, i) {
     const text = typeof line === 'string' ? line : line.text;
     const el = document.createElement('p');
     el.className = 'line';
-    if (text) {
+    const words = { els: [], times: [], waits: [] };
+    if (text && synced) {
+      // One element per word, so a style can bring the words in as they are sung.
+      const parts = splitWords(text);
+      words.times = wordTimes(parts, line.time, i + 1 < lines.length ? lines[i + 1].time : undefined);
+      parts.forEach(function (part, j) {
+        if (j) el.appendChild(document.createTextNode(' '));
+        const span = document.createElement('span');
+        span.className = 'w';
+        span.textContent = part;
+        // Where this word waits before it is sung, in ems from its place in the line.
+        const key = seed + ':' + i + ':' + j;
+        const wait = { x: (unit(key + 'x') - 0.5) * 2.4, y: 1.25 + unit(key + 'y') * 2.1 };
+        span.style.setProperty('--wx', wait.x.toFixed(2) + 'em');
+        span.style.setProperty('--wy', wait.y.toFixed(2) + 'em');
+        el.appendChild(span);
+        words.els.push(span);
+        words.waits.push(wait);
+      });
+    } else if (text) {
       el.textContent = text;
     } else {
       el.classList.add('gap');
       // A timed gap is an instrumental break; the last one just ends the song.
-      if (result.kind === 'synced' && i < lines.length - 1) el.textContent = '♪';
+      if (synced && i < lines.length - 1) el.textContent = '♪';
     }
+
+    // A verse ends at a break in the lyrics, or after a few lines.
+    if (!text || inVerse >= VERSE_LINES) {
+      verse++;
+      inVerse = 0;
+    }
+    if (text) inVerse++;
+    state.tilts.push(TILTS[verse % TILTS.length]);
+    el.style.setProperty('--indent', (unit(seed + ':' + i + 'i') * 9).toFixed(1) + '%');
+
     fragment.appendChild(el);
     state.lineEls.push(el);
+    state.words.push(words);
   });
   box.appendChild(fragment);
+  box.appendChild(threads);
   relayout();
 }
 
-function setY(y) {
-  $('lines').style.transform = 'translate3d(0,' + Math.round(y) + 'px,0)';
+// Where the list sits: `anchor` px down the lyrics area is the point `center` px down
+// the list, with the whole list leaning `tilt` degrees around that point.
+function place(anchor, center, tilt) {
+  $('lines').style.transform = 'translate3d(0,' + Math.round(anchor) + 'px,0) rotate(' + tilt +
+    'deg) translate3d(0,' + (-Math.round(center)) + 'px,0)';
 }
 
 function setActive(index) {
   state.index = index;
+  state.wordLine = -1;
   const els = state.lineEls;
   for (let i = 0; i < els.length; i++) {
     els[i].classList.toggle('active', i === index);
     els[i].classList.toggle('past', i < index);
   }
   placeLines();
+  if (index < 0) drawThreads();
 }
 
 // Slide the list so the highlighted line sits at the anchor.
 function placeLines() {
   const els = state.lineEls;
   if (!els.length) return;
-  const el = els[Math.max(0, state.index)];
-  setY($('lyricsView').clientHeight * ANCHOR - (el.offsetTop + el.offsetHeight / 2));
+  const index = Math.max(0, state.index);
+  const el = els[index];
+  const tilt = state.look === 'kinetic' ? (state.tilts[index] || 0) : 0;
+  place($('lyricsView').clientHeight * styleInfo(state.look).anchor, el.offsetTop + el.offsetHeight / 2, tilt);
+}
+
+// Light the words of the current line that have been sung by `at`.
+function updateWords(index, at) {
+  const words = state.words[index];
+  if (!words) return;
+  const count = wordsSungAt(words.times, at);
+  if (index === state.wordLine && count === state.wordCount) return;
+  state.wordLine = index;
+  state.wordCount = count;
+  for (let j = 0; j < words.els.length; j++) {
+    words.els[j].classList.toggle('sung', j < count);
+    words.els[j].classList.toggle('latest', j === count - 1);
+  }
+  drawThreads();
+}
+
+/* Kinetic style: a hairline runs through the words still waiting to be sung. */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const threads = document.createElementNS(SVG_NS, 'svg');
+const threadLine = document.createElementNS(SVG_NS, 'polyline');
+threads.setAttribute('id', 'threads');
+threads.setAttribute('aria-hidden', 'true');
+threads.appendChild(threadLine);
+
+function drawThreads() {
+  const words = state.look === 'kinetic' && state.index >= 0 ? state.words[state.index] : null;
+  const from = state.wordLine === state.index ? Math.max(0, state.wordCount) : 0;
+  if (!words || from >= words.els.length) {
+    threadLine.setAttribute('points', '');
+    return;
+  }
+  // Positions are worked out from the layout, not read off the screen, so they hold
+  // while the list is still sliding into place.
+  const size = parseFloat(getComputedStyle(words.els[0]).fontSize) || 16;
+  const points = [];
+  for (let j = from; j < words.els.length; j++) {
+    const el = words.els[j];
+    points.push([
+      el.offsetLeft + words.waits[j].x * size + el.offsetWidth * WAIT_SCALE / 2,
+      el.offsetTop + el.offsetHeight / 2 + words.waits[j].y * size,
+    ]);
+  }
+  const width = $('lines').offsetWidth;
+  points.unshift([-width * 0.2, points[0][1] - size * 0.9]);
+  points.push([width * 1.2, points[points.length - 1][1] + size * 0.7]);
+  threadLine.setAttribute('points', points.map(function (p) {
+    return p[0].toFixed(1) + ',' + p[1].toFixed(1);
+  }).join(' '));
 }
 
 // Unsynced lyrics: scroll through the whole text over the length of the song.
@@ -397,7 +513,7 @@ function placePlain(position) {
   const total = $('lines').offsetHeight;
   const duration = state.track ? state.track.durationMs : 0;
   const fraction = duration ? Math.min(1, Math.max(0, position / duration)) : 0;
-  setY(view * 0.14 - fraction * Math.max(0, total - view * 0.62));
+  place(view * 0.14 - fraction * Math.max(0, total - view * 0.62), 0, 0);
 }
 
 // Re-place the lyrics without animating, after anything that changes their size.
@@ -407,8 +523,11 @@ function relayout() {
   const box = $('lines');
   box.style.transition = 'none';
   if (lyrics.kind === 'synced') {
-    if (state.index === -2) setActive(lineIndexAt(state.lines, rawPosition(performance.now()) + settings.offset));
+    const at = rawPosition(performance.now()) + settings.offset;
+    if (state.index === -2) setActive(lineIndexAt(state.lines, at));
     else placeLines();
+    if (state.index >= 0) updateWords(state.index, at);
+    drawThreads();
   } else {
     placePlain(rawPosition(performance.now()));
   }
@@ -442,6 +561,7 @@ function frame(now) {
     // Don't flick back a line over a correction of a few hundred milliseconds.
     if (index === state.index - 1 && at > state.lines[state.index].time - 400) index = state.index;
     if (index !== state.index) setActive(index);
+    if (index >= 0) updateWords(index, at);
   }
 
   if (now - lastSlowTick >= 500) {
@@ -463,6 +583,51 @@ function toast(message) {
 
 function clearToast() {
   $('toast').classList.remove('on');
+}
+
+/* ---------- Styles ---------- */
+
+// The style asked for: this device's own choice, else the host's default in config.js.
+function styleChoice() {
+  if (isChoice(settings.style)) return settings.style;
+  return isChoice(config.style) ? config.style : 'classic';
+}
+
+// Put the chosen style on screen. On shuffle, each new song gets a different one;
+// `repick` makes shuffle choose again for the song already playing.
+function applyLook(repick) {
+  const choice = styleChoice();
+  const trackId = state.track ? state.track.id : '';
+  if (choice !== SHUFFLE) state.look = choice;
+  else if (repick || state.lookTrack !== trackId) state.look = shuffled(trackId, state.look);
+  state.lookTrack = trackId;
+
+  const root = document.documentElement;
+  if (state.running) root.setAttribute('data-style', state.look);
+  else root.removeAttribute('data-style');
+
+  // Small per-song variations, so the same style still looks fresh from song to song.
+  const seed = hash(trackId);
+  root.setAttribute('data-font', String(seed % 3));
+  root.style.setProperty('--hue', String(seed % 360));
+  root.style.setProperty('--paper', String(PAPERS[(seed >>> 4) % PAPERS.length]));
+
+  const name = styleInfo(state.look).name;
+  $('styleBtn').textContent = 'Style: ' + (choice === SHUFFLE ? 'Shuffle (' + name + ')' : name);
+  relayout();
+}
+
+let cardTimer = 0;
+
+// A new song announces itself for a few seconds, in the styles that show it.
+function showTitleCard(track) {
+  $('cardTitle').textContent = track.title;
+  $('cardAlbum').textContent = track.album;
+  $('cardArtist').textContent = track.artist;
+  const player = $('player');
+  player.classList.add('card-on');
+  clearTimeout(cardTimer);
+  cardTimer = setTimeout(function () { player.classList.remove('card-on'); }, 4500);
 }
 
 /* ---------- Controls ---------- */
@@ -509,6 +674,11 @@ const actions = {
   later: function () { nudge(-OFFSET_STEP); },
   smaller: function () { zoom(-0.1); },
   bigger: function () { zoom(0.1); },
+  style: function () {
+    settings.style = nextChoice(styleChoice());
+    saveSettings();
+    applyLook(true);
+  },
   fullscreen: toggleFullscreen,
   logout: function () {
     if (DEMO) {
@@ -550,6 +720,7 @@ function initControls() {
     else if (key === 'ArrowRight') actions.later();
     else if (key === '+' || key === '=') actions.bigger();
     else if (key === '-' || key === '_') actions.smaller();
+    else if (key === 's' || key === 'S') actions.style();
     else if ((key === 'f' || key === 'F') && !$('fullscreenBtn').hidden) actions.fullscreen();
     else return;
     showControls();
@@ -577,6 +748,11 @@ window.addEventListener('online', function () { schedule(0); });
 /* ---------- Start ---------- */
 
 async function boot() {
+  // ?style=neon picks a style from the address, handy for a kiosk with no keyboard.
+  if (isChoice(QUERY.get('style'))) {
+    settings.style = QUERY.get('style');
+    saveSettings();
+  }
   applySettings();
   initSetup();
   initControls();
