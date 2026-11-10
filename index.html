@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lyric Screen</title>
+  <meta name="description" content="An always-on screen that shows the lyrics, in time, for whatever is playing on your Spotify account.">
+  <meta name="theme-color" content="#0b0b10">
+  <meta name="referrer" content="no-referrer">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lyrics">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="bg" aria-hidden="true">
+    <div id="bgA" class="bg-img"></div>
+    <div id="bgB" class="bg-img"></div>
+  </div>
+
+  <!-- First run: connect a Spotify account -->
+  <main id="setup" class="screen" hidden>
+    <div class="card">
+      <h1>Lyric Screen</h1>
+      <p class="lede">Leave this page open and it shows the lyrics, in time, for whatever is playing on your Spotify account.</p>
+
+      <div id="setupError" class="error" role="alert" hidden></div>
+      <div id="insecure" class="error" role="alert" hidden>
+        Spotify login only works on a secure address. Open this page over <b>https://</b>, or on the device itself at <b>http://127.0.0.1</b>.
+      </div>
+
+      <div id="quick" hidden>
+        <button id="quickConnect" class="primary" type="button">Connect Spotify</button>
+        <p class="fine">This button works for accounts the site owner has added. Anyone else can connect with their own Spotify app below.</p>
+      </div>
+
+      <details id="own" open>
+        <summary>Connect with your own Spotify app</summary>
+        <ol class="steps">
+          <li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify Developer Dashboard</a> and choose <b>Create app</b>. Spotify requires a Premium account for this.</li>
+          <li>
+            Under <b>Redirect URIs</b> add exactly this address, and tick <b>Web API</b>:
+            <span class="uri-row">
+              <code id="redirectUri" class="uri"></code>
+              <button id="copyUri" class="mini" type="button">Copy</button>
+            </span>
+          </li>
+          <li>Save, open the app's settings, and paste its <b>Client ID</b> here:</li>
+        </ol>
+        <form id="ownForm" novalidate>
+          <label class="sr-only" for="clientId">Spotify Client ID</label>
+          <input id="clientId" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Client ID (32 characters)">
+          <button class="primary" type="submit">Connect Spotify</button>
+        </form>
+      </details>
+
+      <p class="fine">Your login is kept only in this browser, so this device stays connected until you log out. Spotify asks you to reconnect about every six months. The page talks directly to Spotify, and sends the song title and artist to LRCLIB to find lyrics. There is no other server.</p>
+      <p class="fine"><a href="?demo">See a demo without connecting</a></p>
+    </div>
+  </main>
+
+  <!-- The always-on display -->
+  <main id="player" class="screen is-idle" hidden>
+    <section class="now" aria-label="Now playing">
+      <div class="art-wrap"><img id="art" alt="" hidden></div>
+      <div class="meta">
+        <h1 id="title"></h1>
+        <p id="artist"></p>
+        <p id="album"></p>
+      </div>
+      <div class="progress-block">
+        <div class="progress"><div id="bar"></div></div>
+        <div class="times"><span id="elapsed">0:00</span><span id="pausedTag">Paused</span><span id="total">0:00</span></div>
+        <p id="syncNote">Lyrics for this song aren&rsquo;t time-synced, so they scroll at a steady pace.</p>
+      </div>
+    </section>
+
+    <section id="lyricsView" class="lyrics" aria-label="Lyrics">
+      <div id="lines"></div>
+      <p id="lyricsNote"></p>
+    </section>
+
+    <section id="idle" aria-live="polite">
+      <div id="clock"></div>
+      <p id="idleTitle">Nothing playing</p>
+      <p id="idleHint">Play something on Spotify and the lyrics appear here.</p>
+    </section>
+
+    <div id="controls" class="controls">
+      <div class="group">
+        <button type="button" data-act="earlier" title="Show lyrics earlier (left arrow)">Earlier</button>
+        <span id="offsetLabel" class="readout">Timing 0.00s</span>
+        <button type="button" data-act="later" title="Show lyrics later (right arrow)">Later</button>
+      </div>
+      <div class="group">
+        <button type="button" data-act="smaller" title="Smaller text (-)">A&minus;</button>
+        <button type="button" data-act="bigger" title="Bigger text (+)">A+</button>
+      </div>
+      <button type="button" data-act="fullscreen" id="fullscreenBtn" title="Fullscreen (F)">Fullscreen</button>
+      <button type="button" data-act="logout" id="logoutBtn">Log out</button>
+    </div>
+  </main>
+
+  <div id="toast" role="status"></div>
+
+  <noscript><p style="padding:2rem;color:#fff">Lyric Screen needs JavaScript.</p></noscript>
+
+  <script src="config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

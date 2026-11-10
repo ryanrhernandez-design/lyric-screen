@@ -1,0 +1,11 @@
+{
+  "name": "lyric-screen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An always-on screen that shows the lyrics for whatever is playing on your Spotify account.",
+  "scripts": {
+    "start": "python3 -m http.server 8888 --bind 127.0.0.1",
+    "test": "node --test"
+  }
+}
